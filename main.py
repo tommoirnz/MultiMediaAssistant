@@ -16,7 +16,6 @@ import subprocess
 import time
 import requests
 import os
-import sys
 
 
 def check_ollama_running():
@@ -29,72 +28,90 @@ def check_ollama_running():
 
 
 def start_ollama():
-    """Try to start the Ollama server on Windows with proper monitoring."""
-    print("[Ollama] Starting Ollama server...")
+    """Try to start Ollama on Windows without debug output."""
+    print("[Ollama] Starting Ollama server (quiet mode)...")
 
+    # Common Windows paths
     possible_paths = [
         os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Ollama", "ollama.exe"),
         os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "Ollama", "ollama.exe"),
+        "C:\\Program Files\\Ollama\\ollama.exe",
+        "C:\\Program Files (x86)\\Ollama\\ollama.exe",
         os.path.expanduser("~\\AppData\\Local\\Programs\\Ollama\\ollama.exe"),
     ]
 
     for path in possible_paths:
         if os.path.exists(path):
             try:
-                # Create a log file for Ollama output
-                log_file = open("ollama_log.txt", "w")
+                # FIX: Use 'ollama serve' not just 'ollama'
+                command = [path, "serve"]
 
-                # Start ollama serve with logging
+                # Start minimized
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                 startupinfo.wShowWindow = subprocess.SW_HIDE
 
-                print(f"[Ollama] Starting from: {path}")
-                process = subprocess.Popen(
-                    [path, "serve"],
+                # START: Suppress ALL Ollama debug output
+                subprocess.Popen(
+                    command,
                     startupinfo=startupinfo,
-                    stdout=log_file,
-                    stderr=log_file,
-                    creationflags=subprocess.CREATE_NO_WINDOW
+                    stdout=subprocess.DEVNULL,  # Suppress standard output
+                    stderr=subprocess.DEVNULL,  # Suppress error output
+                    creationflags=subprocess.CREATE_NO_WINDOW  # No console window
                 )
+                # END: Changes
 
-                print(f"[Ollama] Process started (PID: {process.pid})")
-
-                # Check if process is still alive after 2 seconds
-                time.sleep(2)
-                if process.poll() is not None:
-                    # Process died quickly
-                    log_file.close()
-                    # Read the log to see what happened
-                    with open("ollama_log.txt", "r") as f:
-                        log_content = f.read()
-                    print(f"[Ollama] Process died. Log: {log_content[:200]}...")
-                    return False
-
-                print(f"[Ollama] Server seems to be running (PID: {process.pid})")
+                print(f"[Ollama] Started from: {path}")
                 return True
-
             except Exception as e:
                 print(f"[Ollama] Failed to start: {e}")
 
-    print("[Ollama] Executable not found.")
+    print("[Ollama] Executable not found. Please install Ollama from https://ollama.com/")
     return False
 
 
-
-def wait_for_ollama(timeout=30):
+def wait_for_ollama(timeout=15):  # Reduced from 30 to 15 seconds
     """Wait for Ollama to start."""
     print("[Ollama] Waiting for Ollama to start...")
+    start_time = time.time()
+
     for i in range(timeout):
         if check_ollama_running():
-            print("[Ollama] ✓ Ollama is running!")
+            elapsed = time.time() - start_time
+            print(f"[Ollama] ✓ Ollama running! ({elapsed:.1f}s)")
             return True
-        time.sleep(1)
-        if i % 5 == 0:  # Print every 5 seconds
-            print(f"[Ollama] Waiting... ({i + 1}s)")
 
-    print(f"[Ollama] ✗ Timed out after {timeout} seconds")
-    return False
+        # Only print every 3 seconds (less spammy)
+        if i % 3 == 0 and i > 0:
+            print(f"[Ollama] Still starting... ({i}s)")
+
+        time.sleep(1)
+
+    print(f"[Ollama] ⚠️ Timed out after {timeout}s (but continuing)")
+    return False  # Still continue - sometimes API is slow
+
+
+
+def wait_for_ollama(timeout=15):  # Reduced from 30 to 15 seconds
+    """Wait for Ollama to start."""
+    print("[Ollama] Waiting for Ollama to start...")
+    start_time = time.time()
+
+    for i in range(timeout):
+        if check_ollama_running():
+            elapsed = time.time() - start_time
+            print(f"[Ollama] ✓ Ollama running! ({elapsed:.1f}s)")
+            return True
+
+        # Only print every 3 seconds (less spammy)
+        if i % 3 == 0 and i > 0:
+            print(f"[Ollama] Still starting... ({i}s)")
+
+        time.sleep(1)
+
+    print(f"[Ollama] ⚠️ Timed out after {timeout}s (but continuing)")
+    return False  # Still continue - sometimes API is slow
+
 
 
 # --- MAIN CHECK ---
@@ -116,7 +133,8 @@ if __name__ == "__main__":
     else:
         print("[Ollama] ✓ Already running")
 
-# === END OLLAMA CHECK ==
+# === END OLLAMA CHECK ===
+
 
 
 from router import CommandRouter
