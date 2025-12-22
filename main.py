@@ -178,8 +178,8 @@ from web_search_window import WebSearchWindow
 # It's free for a fair number of searches but after that you need to pay
 # Put that key in the file .env or the program won't work
 # Try asking it "what is the latest news in New Zealand and it will find that enws and summarise it.
-# Warning, Ai models make mistakes so check and answers
-# Tom Moir Oct 2025
+# Warning, Ai models make mistakes so check any answers
+# Tom Moir Dec  2025
 
 matplotlib.rcParams["figure.max_open_warning"] = 0
 matplotlib.use("Agg")
