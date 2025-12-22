@@ -10,6 +10,115 @@ warnings.filterwarnings("ignore", message=".*pynvml.*")
 warnings.filterwarnings("ignore", message=".*pkg_resources.*")
 warnings.filterwarnings("ignore", message=".*CUDA capability.*")
 warnings.filterwarnings("ignore", message=".*overflow encountered.*")
+
+# === SIMPLE OLLAMA CHECK & START ===
+import subprocess
+import time
+import requests
+import os
+import sys
+
+
+def check_ollama_running():
+    """Check if Ollama API is responding."""
+    try:
+        response = requests.get("http://localhost:11434/api/tags", timeout=2)
+        return response.status_code == 200
+    except:
+        return False
+
+
+def start_ollama():
+    """Try to start the Ollama server on Windows with proper monitoring."""
+    print("[Ollama] Starting Ollama server...")
+
+    possible_paths = [
+        os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Ollama", "ollama.exe"),
+        os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "Ollama", "ollama.exe"),
+        os.path.expanduser("~\\AppData\\Local\\Programs\\Ollama\\ollama.exe"),
+    ]
+
+    for path in possible_paths:
+        if os.path.exists(path):
+            try:
+                # Create a log file for Ollama output
+                log_file = open("ollama_log.txt", "w")
+
+                # Start ollama serve with logging
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+
+                print(f"[Ollama] Starting from: {path}")
+                process = subprocess.Popen(
+                    [path, "serve"],
+                    startupinfo=startupinfo,
+                    stdout=log_file,
+                    stderr=log_file,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+
+                print(f"[Ollama] Process started (PID: {process.pid})")
+
+                # Check if process is still alive after 2 seconds
+                time.sleep(2)
+                if process.poll() is not None:
+                    # Process died quickly
+                    log_file.close()
+                    # Read the log to see what happened
+                    with open("ollama_log.txt", "r") as f:
+                        log_content = f.read()
+                    print(f"[Ollama] Process died. Log: {log_content[:200]}...")
+                    return False
+
+                print(f"[Ollama] Server seems to be running (PID: {process.pid})")
+                return True
+
+            except Exception as e:
+                print(f"[Ollama] Failed to start: {e}")
+
+    print("[Ollama] Executable not found.")
+    return False
+
+
+
+def wait_for_ollama(timeout=30):
+    """Wait for Ollama to start."""
+    print("[Ollama] Waiting for Ollama to start...")
+    for i in range(timeout):
+        if check_ollama_running():
+            print("[Ollama] ✓ Ollama is running!")
+            return True
+        time.sleep(1)
+        if i % 5 == 0:  # Print every 5 seconds
+            print(f"[Ollama] Waiting... ({i + 1}s)")
+
+    print(f"[Ollama] ✗ Timed out after {timeout} seconds")
+    return False
+
+
+# --- MAIN CHECK ---
+if __name__ == "__main__":
+    # First check if Ollama is already running
+    if not check_ollama_running():
+        print("[Ollama] Ollama is not running")
+
+        # Try to start it
+        if start_ollama():
+            # Wait for it to start
+            if not wait_for_ollama():
+                print("[WARNING] Ollama may not be ready. Continuing anyway...")
+        else:
+            print("[WARNING] Could not start Ollama. Some features may not work.")
+            print("You can start Ollama manually by:")
+            print("1. Opening the Ollama app")
+            print("2. Or running 'ollama serve' in Command Prompt")
+    else:
+        print("[Ollama] ✓ Already running")
+
+# === END OLLAMA CHECK ==
+
+
 from router import CommandRouter
 # Also set numpy to ignore specific warnings
 import numpy as np
@@ -156,26 +265,55 @@ def load_cfg():
 # ---------- TTS cleaner ----------
 def clean_for_tts(text: str, speak_math: bool = True) -> str:
     """
-    Enhanced TTS cleaner that converts LaTeX math to spoken English.
+    TTS cleaner that removes Markdown formatting added by AIs.
+    LaTeX math is already handled by math_speech_converter.
 
     Args:
-        text: Input text containing LaTeX math
+        text: Input text
         speak_math: If True, convert math to speech; if False, say "equation"
 
     Returns:
-        Text ready for TTS with math properly spoken
+        Text ready for TTS with formatting removed
     """
     if not text:
         return ""
 
-    # Use the math speech converter to handle LaTeX math
+    # Let the math converter handle any LaTeX/math first
     cleaned_text = math_speech_converter.make_speakable_text(text, speak_math=speak_math)
 
-    # Additional light cleanup for TTS
-    cleaned_text = re.sub(r"[#*_`~>\[\]\(\)-]", "", cleaned_text)
-    cleaned_text = re.sub(r":[a-z_]+:", "", cleaned_text)
-    cleaned_text = re.sub(r"^[QAqa]:\s*", "", cleaned_text)
-    cleaned_text = re.sub(r"\s{2,}", " ", cleaned_text)
+    # Now remove only Markdown/formatting characters that AIs add
+
+    # Remove ALL markdown formatting patterns:
+
+    # Markdown headers (###, ##, #)
+    cleaned_text = re.sub(r'^#{1,6}\s*', '', cleaned_text, flags=re.MULTILINE)
+
+    # Bullet points (*, -, +, •) at line start
+    cleaned_text = re.sub(r'^[\s]*[\*\-+\•]\s+', '', cleaned_text, flags=re.MULTILINE)
+
+    # Numbered lists (1., 2., etc.) at line start
+    cleaned_text = re.sub(r'^[\s]*\d+\.\s+', '', cleaned_text, flags=re.MULTILINE)
+
+    # Bold and italic (**text**, *text*)
+    # Use non-greedy matching to handle multiple in one line
+    cleaned_text = re.sub(r'\*\*(.*?)\*\*', r'\1', cleaned_text)
+    cleaned_text = re.sub(r'\*(.*?)\*', r'\1', cleaned_text)
+
+    # Underline (__text__)
+    cleaned_text = re.sub(r'__(.*?)__', r'\1', cleaned_text)
+
+    # Strikethrough (~~text~~)
+    cleaned_text = re.sub(r'~~(.*?)~~', r'\1', cleaned_text)
+
+    # Inline code (`text`)
+    cleaned_text = re.sub(r'`(.*?)`', r'\1', cleaned_text)
+
+    # Remove any remaining formatting chars that surround words
+    # This catches cases the patterns above might miss
+    cleaned_text = re.sub(r'([#*_`])([A-Za-z0-9]+)(?=\1)', r'\2', cleaned_text)
+
+    # Clean up: remove multiple spaces, trim
+    cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
 
     return cleaned_text.strip()
 
