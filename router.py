@@ -41,7 +41,29 @@ class CommandRouter:
             "space explorer personality": "Space Explorer",
             "captain nova mode": "Space Explorer",
             "om shanti": "BK Yogi",
-            "aum shanti": "BK Yogi"
+            "aum shanti": "BK Yogi",
+            # ADD HOLLY COMMANDS HERE:
+            "be the computer": "Holly",
+            "be holly": "Holly",
+            "be the ship computer": "Holly",
+            "holly mode": "Holly",
+            "red dwarf mode": "Holly",
+            "computer personality": "Holly",
+            "ship computer": "Holly",
+            "talk to holly": "Holly",
+            "wake up holly": "Holly",
+            # RAB C. NESBITT COMMANDS:
+            "be rab": "Rab C. Nesbitt",
+            "rab c nesbitt": "Rab C. Nesbitt",
+            "glasgow mode": "Rab C. Nesbitt",
+            "scottish philosopher": "Rab C. Nesbitt",
+            "be the glaswegian": "Rab C. Nesbitt",
+            "rab mode": "Rab C. Nesbitt",
+            "talk to rab": "Rab C. Nesbitt",
+            "glasgow drunk": "Rab C. Nesbitt",
+            "street philosopher": "Rab C. Nesbitt",
+            "nesbitt mode": "Rab C. Nesbitt"
+
         }
 
         # Mute commands
@@ -572,3 +594,5 @@ class CommandRouter:
         except Exception as e:
             if self.app:
                 self.app.logln(f"[sleep-reminder] error: {e}")
+
+
