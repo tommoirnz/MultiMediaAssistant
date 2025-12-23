@@ -92,25 +92,6 @@ def wait_for_ollama(timeout=15):  # Reduced from 30 to 15 seconds
 
 
 
-def wait_for_ollama(timeout=15):  # Reduced from 30 to 15 seconds
-    """Wait for Ollama to start."""
-    print("[Ollama] Waiting for Ollama to start...")
-    start_time = time.time()
-
-    for i in range(timeout):
-        if check_ollama_running():
-            elapsed = time.time() - start_time
-            print(f"[Ollama] ✓ Ollama running! ({elapsed:.1f}s)")
-            return True
-
-        # Only print every 3 seconds (less spammy)
-        if i % 3 == 0 and i > 0:
-            print(f"[Ollama] Still starting... ({i}s)")
-
-        time.sleep(1)
-
-    print(f"[Ollama] ⚠️ Timed out after {timeout}s (but continuing)")
-    return False  # Still continue - sometimes API is slow
 
 
 
@@ -236,7 +217,7 @@ from asr_whisper import ASR
 from qwen_llmSearch2 import QwenLLM
 from pydub import AudioSegment
 
-...
+
 
 # Import the math speech converter
 from Speak_Maths import MathSpeechConverter
