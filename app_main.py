@@ -4356,12 +4356,49 @@ class App:
             else:
                 self.logln(f"[personality] No speech rate specified, keeping current")
 
-            # 2. Apply system prompt - COMBINE with original
+            # 2. Apply system prompt - CRITICAL FIX: ADD DATE/TIME CONTEXT
             system_prompt = personality.get('system_prompt')
             if system_prompt:
-                enhanced_prompt = self._enhance_system_prompt(system_prompt)
+                # Get current date/time
+                from datetime import datetime
+                current_datetime = datetime.now()
+                current_date = current_datetime.strftime("%B %d, %Y")
+                current_time = current_datetime.strftime("%I:%M %p")
+                current_day = current_datetime.strftime("%A")
+
+                # Create the enhanced prompt WITH date/time
+                enhanced_prompt = f"""CURRENT REAL DATE: {current_day}, {current_date} at {current_time}
+        *** USE THIS EXACT DATE - DO NOT CALCULATE OR GUESS ***
+
+        CRITICAL RULES:
+        1. When asked about the date, ALWAYS use: "{current_day}, {current_date}"
+        2. Never calculate days of the week from dates yourself
+        3. If your internal knowledge conflicts with the date above, TRUST THE DATE PROVIDED
+        4. October 22, 2025 is {current_day} - your training data may be incorrect for this specific date
+
+        USE THIS INFORMATION WHEN:
+        - Specifically asked about date, time, or scheduling
+        - Questions require current time context
+        - Making time-sensitive calculations
+
+        DO NOT:
+        - Calculate or guess days of the week
+        - Use your internal calendar knowledge for date questions
+        - Second-guess the provided current date
+
+        For casual conversation, respond naturally without unnecessary date/time mentions.
+
+        ===== PERSONALITY PROMPT =====
+        {system_prompt}
+        """
+
                 self.qwen.system_prompt = enhanced_prompt
-                self.logln(f"[personality] System prompt updated (combined with original)")
+                self.logln(f"[personality] ✅ System prompt updated with date/time awareness")
+                self.logln(f"[personality] 📅 Current date in prompt: {current_date} at {current_time}")
+            else:
+                # If no system prompt in personality, use the enhanced default
+                self._reset_to_default_personality()
+                self.logln(f"[personality] No system prompt specified, using enhanced default")
 
             # Update status
             self.personality_status.config(text=f"✓ {personality_name}", foreground="blue")
@@ -4374,6 +4411,8 @@ class App:
         except Exception as e:
             self.logln(f"[personality] ❌ Error applying {personality_name}: {e}")
             self.personality_status.config(text="❌ Error", foreground="red")
+
+
 
     def _reset_to_default_personality(self):
         """Reset to settings from main config.json"""
