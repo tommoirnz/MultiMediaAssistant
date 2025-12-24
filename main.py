@@ -151,21 +151,22 @@ from app_main import App
 from web_search_window import WebSearchWindow
 
 # This uses two models  and handles images as well. It also has personalities. e/g Butler Mode,Teacher, Holly etc. You can make your own.
-# Personalities are stored in Jason files in the Personalities folder. router.py has all the commands available. 
+# Personalities are stored in Jason files in the Personalities folder. router.py has all the commands available.
 # To make personalities work well I recommend using some of the Cereproc voices you can buy. Or use OneCore modern Microsoft voices.
-# OneCore voices are not always available on sone windows versions. They are on Win 11 Professional. 
+# OneCore voices are not always available on sone windows versions. They are on Win 11 Professional.
 # Look for the Json file  called config.json You will need two models for the AI models loaded into ollama ie     "qwen_model_path": "qwen2.5:7b-instruct",
 #   "vl_model": "qwen2.5vl:7b",
-# One model is for ordinary text and the second for vision. You can also select from main program ie main.py with combo box. 
+# One model is for ordinary text and the second for vision. You can also select from main program ie main.py with combo box.
 # can read equations off paper and handwriting. Uses qwen_llmSearch2.py
 # Can use 'Sleep' and 'Awaken' to mute the microphone but text can still be used. There is also a switch to stop speech.
 # So you can run entirely in text mode if you so choose.
 # To search the internet you will need a key from Brave Search API https://brave.com/search/api/
 # It's free for a fair number of searches but after that you need to pay
-# Put that key in the file .env or the program won't work iewon't search. 
+# Put that key in the file .env or the program won't work iewon't search.
 # Try asking it "what is the latest news in New Zealand and it will find that news  and summarise it.
 # Warning, AI models make mistakes so check any answers
 # Tom Moir Dec  2025
+
 
 matplotlib.rcParams["figure.max_open_warning"] = 0
 matplotlib.use("Agg")
