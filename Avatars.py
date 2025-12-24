@@ -2,7 +2,13 @@ import tkinter as tk
 import time
 import math
 import numpy as np
+import os
+import soundfile as sf
+import sounddevice as sd
+import threading
+import colorsys
 from PIL import Image, ImageDraw, ImageTk
+
 
 # === BASE AVATAR CLASS ===
 class BaseAvatarWindow(tk.Toplevel):
@@ -620,6 +626,7 @@ class RadialPulseAvatar(BaseAvatarWindow):
                     capstyle=tk.ROUND
                 )
 
+
 class FaceRadialAvatar(tk.Toplevel):
     """Face avatar with radial lines that respond to audio levels - Egg shaped"""
 
@@ -920,3 +927,255 @@ class FaceRadialAvatar(tk.Toplevel):
         self._update_window_size()
         self.log_scale_change()
         self._update_face_display()
+
+
+class StringGridAvatar(BaseAvatarWindow):
+    """50x50 grid of strings - responds to external level only (like other avatars)"""
+
+    # Override BASE_DIAMETER for larger grid display
+    BASE_DIAMETER = 900
+
+    def __init__(self, master):
+        super().__init__(master, "Avatar - String Grid")
+
+        # Keep your intensity settings
+        self.visual_intensity = 0.5
+
+        # Grid parameters - 50x50 = 2,500 points
+        self.grid_size = 50
+        self.total_points = self.grid_size * self.grid_size
+        self.grid_center = self.grid_size // 2
+
+        # Visualization state (NO audio monitoring)
+        self.speech_amplitude = 0
+        self.draw_threshold = 0.05
+
+        # Pre-calculate grid positions and properties
+        self.grid_positions = []
+        self.grid_colors = []
+        self.grid_frequencies = []
+        self.grid_phases = []
+
+        np.random.seed(42)
+        for y in range(self.grid_size):
+            for x in range(self.grid_size):
+                # Calculate distance from center (0 at center, 1 at edges)
+                dx = (x - self.grid_center) / self.grid_center
+                dy = (y - self.grid_center) / self.grid_center
+                distance = math.sqrt(dx * dx + dy * dy)
+
+                # Store position
+                self.grid_positions.append((x, y, distance))
+
+                # Color based on vertical position (rainbow gradient)
+                hue = y / self.grid_size
+                saturation = 0.7 + 0.3 * (1.0 - distance)
+                value = 0.5 + 0.5 * (1.0 - distance)
+                r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
+                color = f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+                self.grid_colors.append(color)
+
+                # Frequency based on position (higher near center)
+                freq_base = 1.0 + (1.0 - distance) * 2.0
+                freq_variation = np.random.random() * 0.5
+                self.grid_frequencies.append(freq_base + freq_variation)
+
+                # Random phase
+                self.grid_phases.append(np.random.random() * 2 * math.pi)
+
+        # Start animation (NO audio monitoring)
+        self.start_animation()
+
+        print(f"[avatar] StringGrid loaded - {self.total_points} points")
+
+    def set_level(self, level: int):
+        """Override to convert level to speech_amplitude using your tuned scaling"""
+        super().set_level(level)
+
+        # Convert level (0-31) to speech_amplitude (0.0-1.0) using your scaling
+        if level > 0:
+            # Apply your draw threshold (0.05 = 5%)
+            min_level = int(self.LEVELS * self.draw_threshold)  # ~1.5, round to 2
+            if level < 2:  # Below threshold
+                self.speech_amplitude = 0
+            else:
+                # Apply your rms * 15 scaling factor to the level
+                # First convert level to a 0-1 value
+                level_normalized = level / float(self.LEVELS - 1)
+
+                # Apply your visual_intensity (0.5 = 50% reduction)
+                scaled = level_normalized * self.visual_intensity
+
+                # Apply your rms * 15 factor (but max 1.0)
+                # Since level_normalized is already 0-1, we just need to adjust intensity
+                # Your original: current_rms = min(rms * 15, 1.0)
+                # We'll simulate that by boosting the response
+                boosted = scaled * 2.0  # Simulates the *15 factor for visualization
+
+                self.speech_amplitude = max(0.0, min(1.0, boosted))
+        else:
+            self.speech_amplitude = 0
+
+    def calculate_point_height(self, x, y, distance, index):
+        """Calculate height for a grid point based on speech amplitude - YOUR TUNED VERSION"""
+        if self.speech_amplitude <= 0.001:
+            return 0.0
+
+        # Only activate points if amplitude is high enough for their distance
+        activation_threshold = distance * 0.8
+        if self.speech_amplitude < activation_threshold:
+            return 0.0
+
+        # Base height with your tuned settings
+        base_height = self.speech_amplitude * (1.0 - distance * 0.7)
+
+        # Your tuned wave patterns
+        time_factor = time.time() * 2.0
+        wave_x = math.sin(x * 0.3 + time_factor * self.grid_frequencies[index] + self.grid_phases[index]) * 0.2
+        wave_y = math.cos(y * 0.3 + time_factor * self.grid_frequencies[index] * 1.3) * 0.15
+
+        # Your tuned noise
+        noise = np.random.normal(0, 0.03) * (1.0 - distance)
+
+        total_height = base_height + wave_x + wave_y + noise
+
+        return max(0.0, min(total_height, 1.0))  # Clamp to max 1.0
+
+    def start_animation(self):
+        """Start animation loop (NO audio updates)"""
+        if not self._running:
+            return
+        self.redraw()
+        self._animation_timer = self.after(33, self.start_animation)
+
+    def redraw(self):
+        """Draw the 50x50 grid - COMPLETELY EMPTY when silent"""
+        self.canvas.delete("all")
+
+        width = self.canvas.winfo_width()
+        height = self.canvas.winfo_height()
+
+        if width < 100 or height < 100:
+            return
+
+        # Draw circular background (mask)
+        cx, cy, r = self._circle_geom()
+        self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
+                                fill=self.BG, outline=self.BG)
+
+        # Check speech amplitude - if 0, show nothing
+        if self.speech_amplitude < self.draw_threshold:
+            return
+
+        # Calculate cell size
+        cell_width = width / self.grid_size
+        cell_height = height / self.grid_size
+
+        # Scale number of points with amplitude (your tuned scaling)
+        amplitude_ratio = (self.speech_amplitude - self.draw_threshold) / (1.0 - self.draw_threshold)
+        amplitude_ratio = max(0.0, min(1.0, amplitude_ratio))
+        points_ratio = amplitude_ratio ** 0.7  # Your exponential scaling
+        points_to_draw = int(self.total_points * points_ratio)
+
+        if points_to_draw == 0:
+            return
+
+        # Draw points (prioritize center points first)
+        points_drawn = 0
+
+        # Sort points by distance from center (closest first)
+        sorted_indices = np.argsort([dist for _, _, dist in self.grid_positions])
+
+        for idx in sorted_indices[:points_to_draw]:
+            grid_x, grid_y, distance = self.grid_positions[idx]
+
+            # Calculate screen position
+            screen_x = grid_x * cell_width + cell_width / 2
+            screen_y = grid_y * cell_height + cell_height / 2
+
+            # Calculate height (Z position)
+            height_val = self.calculate_point_height(grid_x, grid_y, distance, idx)
+
+            if height_val > 0:
+                # Calculate visual size based on height and distance from center
+                base_size = 2.0  # Your base size
+                size = base_size + (height_val * 4) + ((1.0 - distance) * 3)  # Your scaling
+                size = max(1, int(size))
+
+                # Calculate visual offset (makes points appear to rise)
+                z_offset = height_val * cell_height * 3
+                visual_y = screen_y - z_offset
+
+                # Get color
+                color = self.grid_colors[idx]
+
+                # Draw point
+                self.canvas.create_oval(
+                    screen_x - size, visual_y - size,
+                    screen_x + size, visual_y + size,
+                    fill=color, outline=color, width=0
+                )
+
+                points_drawn += 1
+
+        # Draw connecting lines for center region (when amplitude is high)
+        if self.speech_amplitude > 0.3:
+            self.draw_center_lines(width, height, cell_width, cell_height)
+
+    def draw_center_lines(self, width, height, cell_width, cell_height):
+        """Draw connecting lines in center region"""
+        center_radius = int(self.grid_size * 0.3 * self.speech_amplitude)
+
+        for y in range(self.grid_center - center_radius, self.grid_center + center_radius, 2):
+            for x in range(self.grid_center - center_radius, self.grid_center + center_radius, 2):
+                idx = y * self.grid_size + x
+                if 0 <= idx < len(self.grid_positions):
+                    grid_x, grid_y, distance = self.grid_positions[idx]
+
+                    if distance < 0.3:
+                        screen_x = grid_x * cell_width + cell_width / 2
+                        screen_y = grid_y * cell_height + cell_height / 2
+
+                        height_val = self.calculate_point_height(grid_x, grid_y, distance, idx)
+                        if height_val > 0:
+                            z_offset = height_val * cell_height * 3
+                            visual_y = screen_y - z_offset
+
+                            # Draw connections to neighbors
+                            for dy in [-1, 1]:
+                                for dx in [-1, 1]:
+                                    ny, nx = y + dy, x + dx
+                                    nidx = ny * self.grid_size + nx
+                                    if 0 <= nidx < len(self.grid_positions):
+                                        ngrid_x, ngrid_y, ndist = self.grid_positions[nidx]
+                                        if ndist < 0.3:
+                                            nheight = self.calculate_point_height(ngrid_x, ngrid_y, ndist, nidx)
+                                            if nheight > 0:
+                                                nscreen_x = ngrid_x * cell_width + cell_width / 2
+                                                nscreen_y = ngrid_y * cell_height + cell_height / 2
+                                                nvisual_y = nscreen_y - nheight * cell_height * 3
+
+                                                # Draw line
+                                                line_color = "#FFFFFF"
+
+                                                self.canvas.create_line(
+                                                    screen_x, visual_y,
+                                                    nscreen_x, nvisual_y,
+                                                    fill=line_color, width=1
+                                                )
+
+    def destroy(self):
+        """Clean up before destroying"""
+        # No audio threads to clean up
+        super().destroy()
+
+
+# === ALL AVATARS COLLECTION ===
+ALL_AVATARS = [
+    CircleAvatarWindow,
+    RectAvatarWindow,
+    RectAvatarWindow2,
+    RadialPulseAvatar,
+    FaceRadialAvatar,
+    StringGridAvatar  # NEW: Added at the end
+]
