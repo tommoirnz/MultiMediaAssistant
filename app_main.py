@@ -60,7 +60,8 @@ try:
     from pydub import AudioSegment
     from Speak_Maths import MathSpeechConverter
     from router import CommandRouter
-    from Avatars import CircleAvatarWindow, RectAvatarWindow, RectAvatarWindow2, RadialPulseAvatar, FaceRadialAvatar
+    from Avatars import CircleAvatarWindow, RectAvatarWindow, RectAvatarWindow2, RadialPulseAvatar, FaceRadialAvatar, \
+        StringGridAvatar
     from latex_window import LatexWindow
     from status_light_window import StatusLightWindow
 except ImportError as e:
@@ -802,7 +803,7 @@ class Item:
     pubdate: Optional[str] = None
     summary: Optional[str] = None
     image_urls: List[str] = field(default_factory=list)
-# === WEB SEARCH WINDOW CLASS  was eer ===
+
 
 # === MAIN APP CLASS ===
 class App:
@@ -859,8 +860,7 @@ class App:
         master.geometry("1080x600")
 
         # === ADD MODEL SELECTION VARIABLES RIGHT HERE ===
-        # === ADD MODEL SELECTION VARIABLES RIGHT HERE ===
-        # === FIXED MODEL SELECTION VARIABLES ===
+
         self.text_model_var = tk.StringVar()
         self.vision_model_var = tk.StringVar()
 
@@ -1125,8 +1125,7 @@ class App:
         ttk.Label(_avatar_bar, text="Avatar").pack(anchor="n")
         self.avatar_combo = ttk.Combobox(
             _avatar_bar, textvariable=self.avatar_kind, state="readonly",
-            width=14, values=["Rings", "Rectangles", "Rectangles 2", "Radial Pulse", "FaceRadialAvatar"]
-
+            width=14, values=["Rings", "Rectangles", "Rectangles 2", "Radial Pulse", "FaceRadialAvatar", "String Grid"]
         )
         self.avatar_combo.current(0)
         self.avatar_combo.pack(pady=(2, 4), anchor="n")
@@ -3763,8 +3762,8 @@ class App:
                 self.avatar_win = RadialPulseAvatar(self.master)
             elif kind == "FaceRadialAvatar":
                 self.avatar_win = FaceRadialAvatar(self.master)
-            #elif kind == "YourNewAvatar":  # ← ADD YOUR NEW ONE HERE
-               # self.avatar_win = YourNewAvatarClass(self.master)
+            elif kind == "String Grid":  # ← ADDED STRING GRID HERE
+                self.avatar_win = StringGridAvatar(self.master)
             else:
                 self.avatar_win = CircleAvatarWindow(self.master)
 
@@ -3773,6 +3772,7 @@ class App:
 
         except Exception as e:
             self.logln(f"[avatar] Error opening avatar: {e}")
+
 
     def close_avatar(self):
         try:
