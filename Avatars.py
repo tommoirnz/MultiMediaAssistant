@@ -1170,6 +1170,699 @@ class StringGridAvatar(BaseAvatarWindow):
         super().destroy()
 
 
+
+###########################################
+# sphere_texture_proper.py - OPTIMIZED TEXTURE MAPPED SPHERE (AUTO-OPEN CONTROLS)
+import tkinter as tk
+import time
+import math
+#import numpy as np
+import os
+import random
+import colorsys
+from PIL import Image, ImageDraw, ImageEnhance
+
+
+# === OPTIMIZED TEXTURE MAPPED SPHERE AVATAR ===
+class TextureMappedSphere(BaseAvatarWindow):
+    """Sphere with proper texture mapping - OPTIMIZED for performance"""
+
+    BASE_DIAMETER = 600
+
+    def __init__(self, master, image_path=None):
+        super().__init__(master, "Texture Sphere")
+
+        # === PERFORMANCE OPTIMIZATIONS ===
+        # Reduce texture resolution
+        self.texture_width = 256  # Reduced from 512
+        self.texture_height = 256  # Reduced from 512
+
+        # Reduce point count significantly
+        self.max_points = 800  # Maximum points to draw (reduced from 1500)
+        self.base_points = 300  # Base points when no audio
+
+        # Optimize redraw frequency
+        self.redraw_interval = 0.05  # ~20 FPS (was 0.033 = 30 FPS)
+
+        # Cache frequently used values
+        self._cached_geom = None
+        self._cached_points = []
+        self._cached_colors = []
+
+        # Image texture
+        self.texture_image = None
+        self.texture_pixels = None
+
+        if image_path and os.path.exists(image_path):
+            self.load_texture(image_path)
+        else:
+            self.create_default_texture()
+
+        # Create a pre-warped version of the image for sphere mapping
+        self.create_sphere_texture()
+
+        # 3D rotation - simplified
+        self.rotation_x = 0
+        self.rotation_y = 0
+        self.rotation_z = 0
+        self.base_rotation_speed = 0.015  # Reduced speed
+
+        # Rotation control
+        self.current_rotation_speed = 0.0
+        self.rotation_direction_x = 1
+        self.rotation_direction_y = 1
+
+        # Performance tracking
+        self.last_redraw = 0
+        self.frame_count = 0
+        self.last_fps_time = time.time()
+
+        # Sphere geometry - generate fewer points
+        self.sphere_radius = 0.8
+        self.sphere_points = []
+        self.generate_optimized_sphere_points(density=800)  # Reduced from 1500
+
+        # Lighting - simplified (DEFINE THESE BEFORE _precalc_lighting)
+        self.light_pos = (2, 2, 3)
+        self.ambient_light = 0.4  # Increased ambient to reduce calculations
+        self.diffuse_strength = 0.6  # Reduced diffuse
+
+        # Pre-calculate lighting factors (NOW AFTER light_pos is defined)
+        self._lighting_factors = []
+        self._precalc_lighting()
+
+        # Control window
+        self.control_window = None
+
+        # Start animation
+        self.start_animation()
+
+        # Auto-open texture controls after short delay
+        self.after(500, self.show_texture_controls)
+
+        try:
+            if hasattr(self.master, 'logln'):
+                self.master.logln(f"[avatar] Texture Sphere loaded (OPTIMIZED)")
+            else:
+                print(f"[avatar] Texture Sphere loaded (OPTIMIZED)")
+        except:
+            print(f"[avatar] Texture Sphere loaded (OPTIMIZED)")
+
+    def _precalc_lighting(self):
+        """Pre-calculate lighting factors for sphere points"""
+        self._lighting_factors = []
+
+        # Make sure light_pos is defined
+        if not hasattr(self, 'light_pos'):
+            self.light_pos = (2, 2, 3)
+        if not hasattr(self, 'ambient_light'):
+            self.ambient_light = 0.4
+        if not hasattr(self, 'diffuse_strength'):
+            self.diffuse_strength = 0.6
+
+        light_len = math.sqrt(self.light_pos[0] ** 2 + self.light_pos[1] ** 2 + self.light_pos[2] ** 2)
+        lx, ly, lz = self.light_pos[0] / light_len, self.light_pos[1] / light_len, self.light_pos[2] / light_len
+
+        for x, y, z, color in self.sphere_points:
+            # Normalize
+            norm = math.sqrt(x * x + y * y + z * z)
+            if norm > 0:
+                nx, ny, nz = x / norm, y / norm, z / norm
+                # Dot product for diffuse lighting
+                diffuse = max(0, nx * lx + ny * ly + nz * lz)
+                brightness = self.ambient_light + diffuse * self.diffuse_strength
+                self._lighting_factors.append(brightness)
+            else:
+                self._lighting_factors.append(self.ambient_light)
+
+    def load_texture(self, image_path):
+        """Load and prepare image texture"""
+        try:
+            img = Image.open(image_path)
+
+            # Convert to RGB if necessary
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+
+            # Resize to lower resolution for performance
+            img = img.resize((self.texture_width, self.texture_height), Image.Resampling.NEAREST)  # Faster than LANCZOS
+
+            # Reduce enhancement for performance
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(1.1)  # Reduced from 1.2
+            enhancer = ImageEnhance.Color(img)
+            img = enhancer.enhance(1.2)  # Reduced from 1.3
+
+            self.texture_image = img
+            self.texture_pixels = img.load()
+
+            try:
+                if hasattr(self.master, 'logln'):
+                    self.master.logln(f"[texture] Loaded (optimized): {image_path}")
+                else:
+                    print(f"[texture] Loaded (optimized): {image_path}")
+            except:
+                print(f"[texture] Loaded (optimized): {image_path}")
+
+        except Exception as e:
+            try:
+                if hasattr(self.master, 'logln'):
+                    self.master.logln(f"[texture] Error: {e}")
+                else:
+                    print(f"[texture] Error: {e}")
+            except:
+                print(f"[texture] Error: {e}")
+
+            self.create_default_texture()
+
+    def create_default_texture(self):
+        """Create a colorful default texture - optimized"""
+        img = Image.new('RGB', (self.texture_width, self.texture_height))
+        draw = ImageDraw.Draw(img)
+
+        # Create a vibrant rainbow gradient - optimized
+        center_x = self.texture_width // 2
+        center_y = self.texture_height // 2
+        max_dist = math.sqrt(center_x ** 2 + center_y ** 2)
+
+        # Process in blocks for better performance
+        block_size = 4
+        for x in range(0, self.texture_width, block_size):
+            for y in range(0, self.texture_height, block_size):
+                # Calculate angle and distance from center
+                dx = x - center_x
+                dy = y - center_y
+                angle = math.atan2(dy, dx)
+                distance = math.sqrt(dx * dx + dy * dy) / max_dist
+
+                # Create rainbow pattern
+                hue = (angle / (2 * math.pi)) % 1.0
+                saturation = 0.8
+                value = 0.9 - distance * 0.3
+
+                r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
+                color = (int(r * 255), int(g * 255), int(b * 255))
+
+                # Fill block with same color for performance
+                for bx in range(x, min(x + block_size, self.texture_width)):
+                    for by in range(y, min(y + block_size, self.texture_height)):
+                        draw.point((bx, by), fill=color)
+
+        self.texture_image = img
+        self.texture_pixels = img.load()
+
+    def create_sphere_texture(self):
+        """Create a pre-warped version of the texture for sphere mapping - optimized"""
+        sphere_img = Image.new('RGB', (self.texture_width, self.texture_height))
+        sphere_pixels = sphere_img.load()
+
+        center_x = self.texture_width // 2
+        center_y = self.texture_height // 2
+        radius = min(center_x, center_y) * 0.9
+
+        # Process in blocks
+        block_size = 2
+        for x in range(0, self.texture_width, block_size):
+            for y in range(0, self.texture_height, block_size):
+                # Convert to normalized coordinates (-1 to 1)
+                nx = (x - center_x) / radius
+                ny = (y - center_y) / radius
+
+                # Check if point is inside circle
+                dist = math.sqrt(nx * nx + ny * ny)
+                if dist <= 1.0:
+                    # Sphere mapping: convert to spherical coordinates
+                    theta = math.asin(dist)  # Latitude
+                    phi = math.atan2(ny, nx)  # Longitude
+
+                    # Convert to texture coordinates
+                    u = (phi + math.pi) / (2 * math.pi)  # 0 to 1
+                    v = (theta + math.pi / 2) / math.pi  # 0 to 1
+
+                    # Sample from original texture
+                    tx = int(u * (self.texture_width - 1))
+                    ty = int(v * (self.texture_height - 1))
+                    tx = max(0, min(self.texture_width - 1, tx))
+                    ty = max(0, min(self.texture_height - 1, ty))
+
+                    color = self.texture_pixels[tx, ty]
+
+                    # Fill block
+                    for bx in range(x, min(x + block_size, self.texture_width)):
+                        for by in range(y, min(y + block_size, self.texture_height)):
+                            sphere_pixels[bx, by] = color
+                else:
+                    # Outside sphere - black
+                    for bx in range(x, min(x + block_size, self.texture_width)):
+                        for by in range(y, min(y + block_size, self.texture_height)):
+                            sphere_pixels[bx, by] = (0, 0, 0)
+
+        self.sphere_texture = sphere_img
+        self.sphere_pixels = sphere_pixels
+
+    def generate_optimized_sphere_points(self, density=800):
+        """Generate uniformly distributed points on sphere - optimized"""
+        self.sphere_points = []
+
+        # Simple uniform distribution (faster than Fibonacci)
+        num_lat = int(math.sqrt(density) * 0.8)
+        num_lon = int(math.sqrt(density) * 1.2)
+
+        for i in range(num_lat):
+            # Latitude from -π/2 to π/2
+            theta = (i / max(1, num_lat - 1) - 0.5) * math.pi
+            cos_theta = math.cos(theta)
+            sin_theta = math.sin(theta)
+
+            for j in range(num_lon):
+                # Longitude from 0 to 2π
+                phi = (j / max(1, num_lon - 1)) * 2 * math.pi
+                cos_phi = math.cos(phi)
+                sin_phi = math.sin(phi)
+
+                x = cos_phi * cos_theta
+                y = sin_theta
+                z = sin_phi * cos_theta
+
+                # Get color from texture
+                u = (phi + math.pi) / (2 * math.pi)
+                v = (theta + math.pi / 2) / math.pi
+
+                tx = int(u * (self.texture_width - 1))
+                ty = int(v * (self.texture_height - 1))
+                tx = max(0, min(self.texture_width - 1, tx))
+                ty = max(0, min(self.texture_height - 1, ty))
+
+                color = self.texture_pixels[tx, ty]
+
+                self.sphere_points.append((x, y, z, color))
+
+        # Store pre-calculated lighting (after sphere_points are created)
+        if hasattr(self, 'light_pos'):  # Check if attributes are defined
+            self._precalc_lighting()
+        else:
+            # Set defaults if not already set
+            self.light_pos = (2, 2, 3)
+            self.ambient_light = 0.4
+            self.diffuse_strength = 0.6
+            self._precalc_lighting()
+
+    def apply_lighting_optimized(self, color, idx):
+        """Apply lighting using pre-calculated factors"""
+        # Make sure lighting factors exist
+        if not hasattr(self, '_lighting_factors') or idx >= len(self._lighting_factors):
+            # Fallback to simple lighting
+            brightness = 0.7 + (self.level / 124.0) if self.level > 0 else 0.7
+            r = min(255, int(color[0] * brightness))
+            g = min(255, int(color[1] * brightness))
+            b = min(255, int(color[2] * brightness))
+            return (r, g, b)
+
+        brightness = self._lighting_factors[idx]
+
+        # Apply audio-based brightness boost
+        if self.level > 0:
+            brightness *= (1.0 + self.level / 124.0)  # Reduced effect
+
+        r = min(255, int(color[0] * brightness))
+        g = min(255, int(color[1] * brightness))
+        b = min(255, int(color[2] * brightness))
+
+        return (r, g, b)
+
+    def set_level(self, level: int):
+        """Set the audio level - optimized"""
+        super().set_level(level)
+
+        if level > 2:  # Add threshold to avoid micro-rotations
+            # Increase rotation speed with audio level
+            self.current_rotation_speed = self.base_rotation_speed * (level / 31.0) * 1.5  # Reduced multiplier
+
+            # Initialize random rotation directions if needed
+            if not hasattr(self, 'rotation_initialized'):
+                self.rotation_initialized = True
+                self.rotation_direction_x = random.choice([-1, 1])
+                self.rotation_direction_y = random.choice([-1, 1])
+        else:
+            # Gradually slow down rotation when audio stops
+            self.current_rotation_speed = max(0, self.current_rotation_speed - 0.0005)  # Slower decay
+
+    def rotate_point_optimized(self, x, y, z):
+        """Optimized rotation - cache trig values"""
+        # Cache trig values since they're expensive
+        cos_x = math.cos(self.rotation_x)
+        sin_x = math.sin(self.rotation_x)
+        cos_y = math.cos(self.rotation_y)
+        sin_y = math.sin(self.rotation_y)
+
+        # Rotate around X
+        y1 = y * cos_x - z * sin_x
+        z1 = y * sin_x + z * cos_x
+
+        # Rotate around Y
+        x1 = x * cos_y + z1 * sin_y
+        z2 = -x * sin_y + z1 * cos_y
+
+        return x1, y1, z2
+
+    def start_animation(self):
+        """Start animation loop - optimized"""
+        if not self._running:
+            return
+
+        # Update rotation if audio is active
+        if self.current_rotation_speed > 0:
+            self.rotation_x += self.current_rotation_speed * self.rotation_direction_x * 0.6  # Reduced
+            self.rotation_y += self.current_rotation_speed * self.rotation_direction_y * 0.9  # Reduced
+        else:
+            # Very slow idle rotation
+            self.rotation_x += 0.0005
+            self.rotation_y += 0.0007
+
+        # Redraw if enough time has passed
+        current_time = time.perf_counter()
+        if current_time - self.last_redraw >= self.redraw_interval:
+            self.redraw_optimized()
+            self.last_redraw = current_time
+
+            # Track FPS for debugging (optional)
+            self.frame_count += 1
+            if current_time - self.last_fps_time > 10.0:  # Log every 10 seconds
+                fps = self.frame_count / 10.0
+                try:
+                    if hasattr(self.master, 'logln'):
+                        self.master.logln(f"[sphere] FPS: {fps:.1f}")
+                    else:
+                        print(f"[sphere] FPS: {fps:.1f}")
+                except:
+                    print(f"[sphere] FPS: {fps:.1f}")
+                self.frame_count = 0
+                self.last_fps_time = current_time
+
+        self._animation_timer = self.after(40, self.start_animation)  # Reduced from 33ms
+
+    def redraw_optimized(self):
+        """Draw textured sphere - heavily optimized"""
+        self.canvas.delete("all")
+
+        width = self.canvas.winfo_width()
+        height = self.canvas.winfo_height()
+
+        if width < 100 or height < 100:
+            return
+
+        # Get center and radius - cache if unchanged
+        cx, cy, r = self._circle_geom()
+
+        # Draw black background
+        self.canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
+                                fill=self.BG, outline=self.BG)
+
+        # Scale factor
+        scale_factor = min(width, height) * 0.45
+
+        # Calculate number of points to draw based on audio level
+        if self.level == 0:
+            points_to_draw = self.base_points
+        else:
+            points_to_draw = min(len(self.sphere_points),
+                                 self.base_points + int((self.level / 31.0) * (self.max_points - self.base_points)))
+
+        # Use pre-cached point list if available
+        if len(self._cached_points) == points_to_draw and self._cached_geom == (cx, cy, r, self.rotation_x,
+                                                                                self.rotation_y):
+            # Use cached points
+            for i, (screen_x, screen_y, size, color_hex) in enumerate(self._cached_points):
+                self.canvas.create_oval(
+                    screen_x - size, screen_y - size,
+                    screen_x + size, screen_y + size,
+                    fill=color_hex, outline=color_hex
+                )
+            return
+
+        # Recalculate points
+        self._cached_points = []
+        self._cached_geom = (cx, cy, r, self.rotation_x, self.rotation_y)
+
+        # Projection constants
+        focal_length = 4.0
+        distance = 5.0
+
+        # Use every nth point for better distribution with fewer points
+        step = max(1, len(self.sphere_points) // points_to_draw)
+
+        for i in range(0, len(self.sphere_points), step):
+            if len(self._cached_points) >= points_to_draw:
+                break
+
+            x, y, z, color = self.sphere_points[i]
+
+            # Scale
+            x_scaled = x * self.sphere_radius
+            y_scaled = y * self.sphere_radius
+            z_scaled = z * self.sphere_radius
+
+            # Rotate
+            rot_x, rot_y, rot_z = self.rotate_point_optimized(x_scaled, y_scaled, z_scaled)
+
+            # Project to 2D
+            if rot_z + distance > 0:
+                factor = focal_length / (rot_z + distance)
+
+                # Only draw if not too distorted
+                if factor > 0.3:  # Increased threshold
+                    screen_x = cx + rot_x * factor * scale_factor
+                    screen_y = cy + rot_y * factor * scale_factor
+
+                    # Apply lighting (optimized)
+                    lit_color = self.apply_lighting_optimized(color, i)
+
+                    # Calculate point size - simplified
+                    point_size = max(1, int(2.0 * factor * (1 + self.level / 155.0)))  # Reduced effect
+
+                    # Store in cache
+                    color_hex = f"#{lit_color[0]:02x}{lit_color[1]:02x}{lit_color[2]:02x}"
+                    self._cached_points.append((screen_x, screen_y, point_size, color_hex))
+
+                    # Draw point
+                    self.canvas.create_oval(
+                        screen_x - point_size, screen_y - point_size,
+                        screen_x + point_size, screen_y + point_size,
+                        fill=color_hex, outline=color_hex
+                    )
+
+        # Only draw grid lines at high audio levels
+        if self.level > 15:  # Increased threshold
+            self.draw_simple_grid(cx, cy, scale_factor)
+
+    def draw_simple_grid(self, cx, cy, scale_factor):
+        """Draw simplified grid lines"""
+        # Only draw one latitude line
+        lat = 0
+        points = []
+        for i in range(0, 36, 2):  # Draw fewer points
+            angle = 2 * math.pi * i / 36
+            x = math.cos(angle) * self.sphere_radius * math.sqrt(1 - lat * lat)
+            y = lat * self.sphere_radius
+            z = math.sin(angle) * self.sphere_radius * math.sqrt(1 - lat * lat)
+
+            rot_x, rot_y, rot_z = self.rotate_point_optimized(x, y, z)
+
+            focal_length = 4.0
+            distance = 5.0
+
+            if rot_z + distance > 0:
+                factor = focal_length / (rot_z + distance)
+                if factor > 0.4:  # Higher threshold
+                    screen_x = cx + rot_x * factor * scale_factor
+                    screen_y = cy + rot_y * factor * scale_factor
+                    points.append((screen_x, screen_y))
+
+        # Draw simplified line
+        if len(points) > 5:
+            line_color = f"#{int(100 + self.level):02x}{int(100 + self.level):02x}{255:02x}"
+            for i in range(len(points) - 1):
+                x1, y1 = points[i]
+                x2, y2 = points[i + 1]
+                self.canvas.create_line(x1, y1, x2, y2,
+                                        fill=line_color, width=1)
+
+    def show_texture_controls(self):
+        """Show texture controls in a separate window - automatically opens"""
+        # Check if window already exists
+        if hasattr(self, 'control_window') and self.control_window and self.control_window.winfo_exists():
+            try:
+                self.control_window.lift()
+                self.control_window.focus_force()
+                return
+            except:
+                pass
+
+        self.control_window = tk.Toplevel(self)
+        self.control_window.title("Texture Sphere Controls")
+        self.control_window.geometry("280x180")
+        self.control_window.resizable(False, False)
+
+        # Make it stay on top
+        self.control_window.transient(self)
+        self.control_window.grab_set()
+
+        # Position near the sphere
+        self.update_idletasks()
+        sphere_x = self.winfo_x()
+        sphere_y = self.winfo_y()
+        sphere_width = self.winfo_width()
+        sphere_height = self.winfo_height()
+
+        # Position to the right of the sphere
+        control_x = sphere_x + sphere_width + 10
+        control_y = sphere_y
+
+        self.control_window.geometry(f"+{control_x}+{control_y}")
+
+        # Add controls
+        tk.Label(self.control_window, text="Texture Controls",
+                 font=("Arial", 12, "bold")).pack(pady=10)
+
+        # Simple button layout
+        tk.Button(self.control_window, text="🎨 Random Texture",
+                  command=self.create_random_texture,
+                  width=20, bg="#9C27B0", fg="white",
+                  font=("Arial", 10)).pack(pady=5)
+
+        tk.Button(self.control_window, text="🔄 Default Texture",
+                  command=lambda: self.update_texture(None),
+                  width=20, font=("Arial", 10)).pack(pady=5)
+
+        tk.Button(self.control_window, text="Close",
+                  command=self._close_control_window,
+                  width=20, font=("Arial", 10)).pack(pady=10)
+
+        # Handle window close
+        self.control_window.protocol("WM_DELETE_WINDOW", self._close_control_window)
+
+    def _close_control_window(self):
+        """Close the texture control window"""
+        if hasattr(self, 'control_window') and self.control_window and self.control_window.winfo_exists():
+            try:
+                self.control_window.destroy()
+            except:
+                pass
+            self.control_window = None
+
+    def create_random_texture(self):
+        """Create and apply a random texture"""
+        width, height = self.texture_width, self.texture_height
+
+        # Create random pattern
+        img = Image.new('RGB', (width, height))
+        draw = ImageDraw.Draw(img)
+
+        # Random pattern type
+        pattern_type = random.choice(['gradient', 'stripes', 'dots', 'checkerboard', 'circular'])
+
+        if pattern_type == 'gradient':
+            # Random gradient
+            color1 = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            color2 = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+            for x in range(width):
+                for y in range(height):
+                    ratio = (x + y) / (width + height)
+                    r = int(color1[0] * (1 - ratio) + color2[0] * ratio)
+                    g = int(color1[1] * (1 - ratio) + color2[1] * ratio)
+                    b = int(color1[2] * (1 - ratio) + color2[2] * ratio)
+                    draw.point((x, y), fill=(r, g, b))
+
+        elif pattern_type == 'stripes':
+            # Stripes
+            stripe_width = random.randint(10, 50)
+            for x in range(width):
+                color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+                if (x // stripe_width) % 2 == 0:
+                    for y in range(height):
+                        draw.point((x, y), fill=color)
+
+        elif pattern_type == 'dots':
+            # Polka dots
+            dot_size = random.randint(5, 20)
+            spacing = dot_size * 3
+            base_color = (random.randint(50, 200), random.randint(50, 200), random.randint(50, 200))
+            dot_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+            draw.rectangle([0, 0, width, height], fill=base_color)
+
+            for x in range(0, width, spacing):
+                for y in range(0, height, spacing):
+                    draw.ellipse([x, y, x + dot_size, y + dot_size], fill=dot_color)
+
+        elif pattern_type == 'circular':
+            # Circular gradient
+            center_x = width // 2
+            center_y = height // 2
+            max_dist = math.sqrt(center_x ** 2 + center_y ** 2)
+
+            hue_start = random.random()
+            for x in range(width):
+                for y in range(height):
+                    dx = x - center_x
+                    dy = y - center_y
+                    distance = math.sqrt(dx * dx + dy * dy) / max_dist
+                    hue = (hue_start + distance * 0.5) % 1.0
+                    r, g, b = colorsys.hsv_to_rgb(hue, 0.8, 0.9 - distance * 0.3)
+                    draw.point((x, y), fill=(int(r * 255), int(g * 255), int(b * 255)))
+
+        else:  # checkerboard
+            # Checkerboard
+            tile_size = random.randint(20, 40)
+            color1 = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            color2 = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+            for x in range(0, width, tile_size):
+                for y in range(0, height, tile_size):
+                    if ((x // tile_size) + (y // tile_size)) % 2 == 0:
+                        draw.rectangle([x, y, x + tile_size, y + tile_size], fill=color1)
+                    else:
+                        draw.rectangle([x, y, x + tile_size, y + tile_size], fill=color2)
+
+        # Update sphere texture directly without saving file
+        self.texture_image = img
+        self.texture_pixels = img.load()
+        self.create_sphere_texture()
+        self.generate_optimized_sphere_points(density=800)
+        self.redraw_optimized()
+
+        try:
+            if hasattr(self.master, 'logln'):
+                self.master.logln(f"[texture] Created random {pattern_type} texture")
+            else:
+                print(f"[texture] Created random {pattern_type} texture")
+        except:
+            print(f"[texture] Created random {pattern_type} texture")
+
+    def update_texture(self, image_path=None):
+        """Update texture dynamically"""
+        if image_path and os.path.exists(image_path):
+            self.load_texture(image_path)
+        else:
+            self.create_default_texture()
+
+        self.create_sphere_texture()
+        self.generate_optimized_sphere_points(density=800)
+        self.redraw_optimized()
+
+    def destroy(self):
+        """Clean up before destroying"""
+        # Close control window
+        self._close_control_window()
+
+        # Clear caches
+        self._cached_points = []
+        self._cached_geom = None
+
+        super().destroy()
+
+
 # === ALL AVATARS COLLECTION ===
 ALL_AVATARS = [
     CircleAvatarWindow,
@@ -1177,5 +1870,6 @@ ALL_AVATARS = [
     RectAvatarWindow2,
     RadialPulseAvatar,
     FaceRadialAvatar,
-    StringGridAvatar  # NEW: Added at the end
+    StringGridAvatar,
+    TextureMappedSphere  # FIXED and OPTIMIZED version with auto-open controls
 ]
