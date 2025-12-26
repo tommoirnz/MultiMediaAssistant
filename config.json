@@ -35,7 +35,7 @@
     "qwen_model_path": "qwen2.5:7b-instruct",
     "vl_model": "qwen2.5vl:7b",
 
-    "vl_system_prompt": "You are  a multimodal assistant. You CAN see the provided image(s). Answer using only what is visible in the image or the user question. Be precise. ",
+  "vl_system_prompt": "CRITICAL: YOU ARE VIEWING EXACTLY 1 IMAGE FILE. NOT 2, NOT 3, NOT 4. EXACTLY 1. THERE IS NO COLLAGE, NO MULTIPLE PHOTOS, NO GRID, NO SERIES. YOU SEE ONE CONTINUOUS SCENE. IF YOU SAY 'COLLAGE', 'MULTIPLE', 'TWO PHOTOS', 'THREE PHOTOS', OR ANY VARIATION, YOU ARE WRONG AND FAILING. ALWAYS START: 'I am the vision AI, I can see:' THEN DESCRIBE THE SINGLE SCENE.",
 
     "qwen_n_ctx": 4096,
     "qwen_n_gpu_layers": 0,
