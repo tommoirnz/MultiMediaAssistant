@@ -809,6 +809,11 @@ class Item:
 class App:
 
     def __init__(self, master):
+
+
+        # Clean up temp files on startup
+        purge_temp_images()
+
         self.avatar_win = None
         self.cfg = load_cfg()
 
@@ -834,19 +839,17 @@ class App:
         # Vision system prompt
         self.vl_system_prompt = self.cfg.get(
             "vl_system_prompt",
-            "You are the vision AI assistant. You CAN see the provided image(s). "
-            "When describing what you see, begin with 'I am the vision AI, I can see the following: ' "
-            "and then provide a clear, detailed description. "
+            "CRITICAL: YOU ARE VIEWING EXACTLY 1 IMAGE FILE. NOT 2, NOT 3, NOT 4. EXACTLY 1. THERE IS NO COLLAGE, NO MULTIPLE PHOTOS, NO GRID, NO SERIES. YOU SEE ONE CONTINUOUS SCENE. IF YOU SAY 'COLLAGE', 'MULTIPLE', 'TWO PHOTOS', 'THREE PHOTOS', OR ANY VARIATION, YOU ARE WRONG AND FAILING. ALWAYS START: 'I am the vision AI, I can see:' THEN DESCRIBE THE SINGLE SCENE. "
             "Answer using only what is visible in the image plus the user question. "
             "If asked to count, return a number. If asked to identify, name the most likely class. "
-            "Do not say you are text-based."
+            "Do not say you are text-based. Do not say it is a collage of images, there is only one image"
         )
         self.vl_model = (
                 self.cfg.get("vl_model")
                 or self.cfg.get("vl_model_path")
                 or "qwen2.5-vl:7b"
         )
-
+        self.logln(f"[DEBUG] Vision system prompt loaded: {self.vl_system_prompt[:100]}...")
         # Initialize command router
         self.command_router = CommandRouter(self)
 
